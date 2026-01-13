@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results - Viral Clip Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-glob"></div>
+
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand-link">
+                <div class="nav-brand">
+                    <img src="/static/logo.png" alt="ViralClipGen Logo" class="nav-logo">
+                    <h2>ViralClip<span class="highlight">Gen</span></h2>
+                </div>
+            </a>
+            <div class="nav-tabs">
+                <a href="/" class="nav-tab">Home</a>
+                <a href="/analyze.html" class="nav-tab active">Analyze</a>
+                <a href="/downloads.html" class="nav-tab">Downloads</a>
+                <a href="/gallery.html" class="nav-tab">Gallery</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="results-page" class="section active">
+            <header>
+                <h1>Analysis <span class="highlight">Results</span></h1>
+                <p>Found viral segments ready for clipping.</p>
+            </header>
+
+            <div id="status-container" class="card hidden">
+                <div class="status-indicator">
+                    <div class="spinner"></div>
+                    <span id="status-text">Starting analysis...</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+            </div>
+
+            <div id="results-container" class="card hidden">
+                <h3><span class="highlight">Viral Segments</span> Found</h3>
+                <div id="clips-list" class="timelines-list">
+                    <!-- Clips will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get task ID from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const taskId = urlParams.get('task');
+
+        if (taskId) {
+            // Poll for results
+            const statusContainer = document.getElementById('status-container');
+            const resultsContainer = document.getElementById('results-container');
+            const progressBar = document.getElementById('progress-bar');
+            const statusText = document.getElementById('status-text');
+
+            statusContainer.classList.remove('hidden');
+
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/status/${taskId}`);
+                    const task = await response.json();
+
+                    progressBar.style.width = `${task.progress}%`;
+                    statusText.innerText = `Status: ${task.status} (${task.progress}%)`;
+
+                    if (task.status === 'completed') {
+                        clearInterval(interval);
+                        statusContainer.classList.add('hidden');
+                        displayResults(task);
+                    } else if (task.status === 'failed') {
+                        clearInterval(interval);
+                        statusText.innerText = `Failed: ${task.error}`;
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 1000);
+        } else {
+            // No task ID, redirect to home
+            window.location.href = '/';
+        }
+
+        function displayResults(task) {
+            const resultsContainer = document.getElementById('results-container');
+            const clipsList = document.getElementById('clips-list');
+
+            resultsContainer.classList.remove('hidden');
+            clipsList.innerHTML = '';
+
+            if (task.segments && task.segments.length > 0) {
+                task.segments.forEach((seg, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'timeline-row';
+                    row.innerHTML = `
+                        <div class="timeline-info">
+                            <span class="timeline-title">${seg.title}</span>
+                            <span class="timeline-meta">Start: ${formatTime(seg.start)} | End: ${formatTime(seg.end)} | Score: ${seg.viral_score}</span>
+                        </div>
+                        <div class="timeline-actions">
+                            <select id="quality-${index}" class="quality-select" style="margin-right: 0.5rem;">
+                                <option value="360">360p</option>
+                                <option value="480">480p</option>
+                                <option value="720">720p</option>
+                                <option value="1080" selected>1080p</option>
+                            </select>
+                            <button class="action-btn" onclick="previewClip('${task.video_id}', ${seg.start}, ${seg.end})" style="margin-right: 0.5rem;">
+                                Preview
+                            </button>
+                            <button class="action-btn" onclick="downloadClip('${task.video_id}', ${seg.start}, ${seg.end}, '${seg.title}', ${index})">
+                                Download
+                            </button>
+                        </div>
+                    `;
+                    clipsList.appendChild(row);
+                });
+            } else {
+                clipsList.innerHTML = '<p style="color:var(--text-muted)">No viral segments found.</p>';
+            }
+        }
+
+        function downloadClip(videoId, start, end, title, index) {
+            const qualitySelect = document.getElementById(`quality-${index}`);
+            const quality = qualitySelect ? qualitySelect.value : '1080';
+            generateClip(videoId, start, end, title, quality);
+        }
+
+        async function generateClip(videoId, start, end, title, quality = '1080') {
+            try {
+                const response = await fetch('/api/generate-clip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_id: videoId,
+                        start: start,
+                        end: end,
+                        title: title,
+                        quality: quality
+                    })
+                });
+
+                if (!response.ok) throw new Error('Generation failed');
+
+                const data = await response.json();
+
+                // Create a temporary link and trigger download
+                const link = document.createElement('a');
+                link.href = data.url;
+                link.download = `${title.replace(/[^a-z0-9]/gi, '_')}_${start}_${end}_${quality}p.mp4`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+            } catch (error) {
+                alert('Failed to generate clip: ' + error.message);
+            }
+        }
+
+        async function previewClip(videoId, start, end) {
+            try {
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                `;
+
+                const content = document.createElement('div');
+                content.style.cssText = `
+                    background: var(--card-bg);
+                    padding: 2rem;
+                    border-radius: 20px;
+                    max-width: 800px;
+                    width: 90%;
+                    max-height: 80vh;
+                    overflow: hidden;
+                `;
+
+                content.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0; color: var(--text-main);">Preview: ${formatTime(start)} - ${formatTime(end)}</h3>
+                        <button onclick="closePreviewModal()" style="
+                            background: var(--primary);
+                            border: none;
+                            color: white;
+                            padding: 0.5rem 1rem;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            font-weight: 600;
+                        ">Close</button>
+                    </div>
+                    <video controls style="width: 100%; max-height: 60vh; border-radius: 10px;" autoplay>
+                        <source src="/api/preview/${videoId}?start=${start}&duration=${end - start}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                `;
+
+                modal.appendChild(content);
+                document.body.appendChild(modal);
+
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.remove();
+                    }
+                });
+
+            } catch (error) {
+                alert('Failed to load preview: ' + error.message);
+            }
+        }
+
+        function closePreviewModal() {
+            const modal = document.querySelector('div[style*="position: fixed"]');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallery - Viral Clip Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-glob"></div>
+
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand-link">
+                <div class="nav-brand">
+                    <img src="/static/logo.png" alt="ViralClipGen Logo" class="nav-logo">
+                    <h2>ViralClip<span class="highlight">Gen</span></h2>
+                </div>
+            </a>
+            <div class="nav-tabs">
+                <a href="/" class="nav-tab">Home</a>
+                <a href="/analyze.html" class="nav-tab">Analyze</a>
+                <a href="/downloads.html" class="nav-tab">Downloads</a>
+                <a href="/gallery.html" class="nav-tab active">Gallery</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div id="gallery-section" class="section active">
+            <header>
+                <h1>Clip <span class="highlight">Gallery</span></h1>
+                <p>Browse and watch all your created clips.</p>
+            </header>
+
+            <div class="card">
+                <h2>All Clips</h2>
+                <div id="gallery-grid" class="gallery-grid">
+                    <!-- Gallery items will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGallery();
+        });
+
+        async function loadGallery() {
+            const grid = document.getElementById('gallery-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p style="color:var(--text-muted)">Loading...</p>';
+
+            try {
+                const response = await fetch('/api/processed-videos');
+                const data = await response.json();
+
+                grid.innerHTML = '';
+                data.videos.forEach(video => {
+                    const card = document.createElement('div');
+                    card.className = 'gallery-item';
+                    card.innerHTML = `
+                        <div class="gallery-icon">🎬</div>
+                        <span class="gallery-title">${video.filename}</span>
+                        <a href="${video.url}" target="_blank" class="action-btn" style="text-decoration:none; display:inline-block; margin-top:0.5rem">Watch</a>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                if (data.videos.length === 0) grid.innerHTML = '<p style="color:var(--text-muted)">Gallery is empty.</p>';
+
+            } catch (error) {
+                grid.innerHTML = '<p style="color:red">Error loading gallery.</p>';
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+
+</html>
